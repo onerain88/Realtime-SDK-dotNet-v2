@@ -6,15 +6,15 @@ using System.IO;
 using Newtonsoft.Json;
 
 namespace LeanCloud.Realtime {
-    internal class RTMWebSocketClient {
+    internal class WebSocketClient {
         // 接收消息回调
-        internal Action<string> OnMessage;
+        internal Action<GenericCommand> OnMessage;
         // 断开连接回调
         internal Action OnDisconnected;
 
         IWebSocketConnection ws;
 
-        internal Task   Open(string url, string protocol = null) {
+        internal Task Open(string url, string protocol = null) {
             AVRealtime.PrintLog("websocket open");
             var tcs = new TaskCompletionSource<bool>();
             void onOpen() {
@@ -84,9 +84,9 @@ namespace LeanCloud.Realtime {
             // TODO 考虑是否要做反序列化？？？
 
             byte[] byteArray = Convert.FromBase64String(msg);
-            var genericCmd = ProtoBuf.Serializer.Deserialize<GenericCommand>(new MemoryStream(byteArray));
-            AVRealtime.PrintLog("websocket<={0}", JsonConvert.SerializeObject(genericCmd));
-            OnMessage?.Invoke(msg);
+            var cmd = ProtoBuf.Serializer.Deserialize<GenericCommand>(new MemoryStream(byteArray));
+            AVRealtime.PrintLog("websocket<={0}", JsonConvert.SerializeObject(cmd));
+            OnMessage?.Invoke(cmd);
         }
 
         void OnWebSocketDisconnected() {

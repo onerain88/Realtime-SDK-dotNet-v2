@@ -33,7 +33,13 @@
     <Compile Include="AVIMClient.cs" />
     <Compile Include="AVIMConversation.cs" />
     <Compile Include="Internal\RTMRouter.cs" />
-    <Compile Include="Internal\RTMWebSocketClient.cs" />
+    <Compile Include="Internal\WebSocketClient.cs" />
+    <Compile Include="AVRealtimeStates.cs" />
+    <Compile Include="AVIMClientStates.cs" />
+    <Compile Include="Internal\CommandUtils.cs" />
+    <Compile Include="Internal\Connection.cs" />
+    <Compile Include="Internal\ConnectionStates.cs" />
+    <Compile Include="Internal\SynchronizationObject.cs" />
   </ItemGroup>
   <ItemGroup>
     <None Include="packages.config" />
