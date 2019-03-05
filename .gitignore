@@ -343,3 +343,10 @@ healthchecksdb
 
 # Backup folder for Package Reference Convert tool in Visual Studio 2017
 MigrationBackup/
+
+Realtime.PCL/bin/
+Realtime.PCL/obj/
+
+Test/bin/
+Test/obj/
+
