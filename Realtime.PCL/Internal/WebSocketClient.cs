@@ -68,6 +68,10 @@ namespace LeanCloud.Realtime {
             return tcs.Task;
         }
 
+        internal void Disconnect() {
+            ws.Close();
+        }
+
         internal void Send(GenericCommand cmd) {
             AVRealtime.PrintLog("websocket=>{0}", JsonConvert.SerializeObject(cmd));
             using (var ms = new MemoryStream()) {

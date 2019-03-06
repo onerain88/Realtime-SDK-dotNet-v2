@@ -4,14 +4,14 @@ using System.Threading;
 using System.Threading.Tasks;
 
 namespace LeanCloud.Realtime {
-    public class SynchronizationObject {
+    internal class RTMContext {
         // 处理事件队列
         readonly Queue<Action> actions;
         readonly AutoResetEvent are;
 
         internal bool Running { get; set; }
 
-        internal SynchronizationObject() {
+        internal RTMContext() {
             actions = new Queue<Action>();
             are = new AutoResetEvent(false);
             Task.Run(() => {
@@ -31,8 +31,9 @@ namespace LeanCloud.Realtime {
         }
 
         internal void Post(Action action) {
-            if (action == null)
+            if (action == null) {
                 return;
+            }
 
             lock (actions) {
                 actions.Enqueue(action);

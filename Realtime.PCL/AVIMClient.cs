@@ -4,7 +4,7 @@ using System.Threading.Tasks;
 using System.Collections.Generic;
 
 namespace LeanCloud.Realtime {
-    public class AVIMClient : SynchronizationObject {
+    public class AVIMClient {
         // Client Id 到 App Id 的映射
         readonly static Dictionary<string, string> clientIdToAppId = new Dictionary<string, string>();
 
@@ -16,6 +16,8 @@ namespace LeanCloud.Realtime {
         readonly string clientId;
 
         Connection connection;
+
+        readonly Dictionary<string, AVIMConversation> convIdToConversation = new Dictionary<string, AVIMConversation>();
 
         AVIMClient(string clientId) {
             this.clientId = clientId;
@@ -48,61 +50,83 @@ namespace LeanCloud.Realtime {
         /// <returns>The open.</returns>
         public Task Open() {
             var tcs = new TaskCompletionSource<bool>();
-            // 1. 获取到连接完成的 Connection
-            AVRealtime.GetConnection("Eohx7L4EMfe4xmairXeT7q1w-gzGzoHsz").ContinueWith(t => {
+            AVRealtime.GetConnection("Eohx7L4EMfe4xmairXeT7q1w-gzGzoHsz").ContinueWith(t => { 
                 if (t.IsFaulted) {
-
+                    AVRealtime.PrintLog(t.Exception.InnerException.Message);
+                    return null;
                 }
-                Post(() => {
-                    connection = t.Result;
-                });
-                // 2. 发送 session/open 消息
-                var sessionOpen = new SessionCommand {
-                    configBitmap = 1,
-                    Ua = "net-universal/1.0.6999.29889",
-                    N = null,
-                    T = 0,
-                    S = null,
-                };
-                var cmd = new GenericCommand {
-                    I = 1,
-                    Cmd = CommandType.Session,
-                    Op = OpType.Open,
-                    peerId = "leancloud",
-                    appId = "Eohx7L4EMfe4xmairXeT7q1w-gzGzoHsz",
-                    sessionMessage = sessionOpen
-                };
-                return connection.SendRequest(cmd);
-            }).Unwrap().ContinueWith(t => {
-                // 3. 在收到 session/opened 消息后，Post 到 Client 线程中设置状态
-                var cmd = t.Result;
-                var sessionOpened = cmd.sessionMessage;
-                // TODO 判断会话打开结果
-
+                // TODO 在 SDK 上下文中设置
+                connection = t.Result;
+                return connection.OpenSession(clientId);
+            }).Unwrap().ContinueWith(t => { 
+                if (t.IsFaulted) {
+                    tcs.SetException(t.Exception.InnerException);
+                    return;
+                }
                 tcs.SetResult(true);
             });
             return tcs.Task;
         }
 
-        internal Task<GenericCommand> SendRequest(GenericCommand command) {
-            return connection.SendRequest(command);
+        // TODO 完善参数
+        /// <summary>
+        /// 创建会话
+        /// </summary>
+        /// <returns>The conversation async.</returns>
+        /// <param name="memberIds">Member identifiers.</param>
+        public Task<AVIMConversation> CreateConversationAsync(List<string> memberIds) {
+            return connection.CreateConversationAsync(clientId, memberIds);
         }
 
-        internal void Disconnect() {
+        // TODO 完善参数
+        /// <summary>
+        /// 加入会话
+        /// </summary>
+        /// <returns>The conversation async.</returns>
+        /// <param name="convId">Conv identifier.</param>
+        public Task<AVIMConversation> JoinConversationAsync(string convId) {
+            return connection.JoinConversationAsync(clientId, convId);
+        }
+
+        /// <summary>
+        /// 离开会话
+        /// </summary>
+        /// <returns>The async.</returns>
+        /// <param name="convId">Conv identifier.</param>
+        public Task QuitAsync(string convId) {
+            return connection.QuitConversationAsync(clientId, convId, new List<string> { convId }).ContinueWith(t => {
+                AVRealtime.Context.Post(() => {
+                    convIdToConversation.Remove(convId);
+                });
+            });
+        }
+
+        /// <summary>
+        /// 踢出会话
+        /// </summary>
+        /// <returns>The async.</returns>
+        /// <param name="convId">Conv identifier.</param>
+        /// <param name="memberIdList">Member identifier list.</param>
+        public Task KickAsync(string convId, List<string> memberIdList) {
+            return connection.QuitConversationAsync(clientId, convId, memberIdList);
+        }
+
+        public Task<AVIMConversation> QueryConversationAsync(string convId) {
+            return connection.QueryConversationAsync(clientId, convId);
+        }
+
+        internal void HandleDisconnection() {
             OnDisconnected?.Invoke();
         }
 
-        internal void Reconnect() {
-            var sessionOpen = new SessionCommand();
-            var cmd = new GenericCommand();
-            SendRequest(cmd).ContinueWith(t => { 
-                if (t.IsFaulted) { 
-                    // TODO 重新失败
-
-                } else {
-                    // 重连成功
-                    OnReconnected?.Invoke();
+        internal void HandleReconnected() {
+            connection.ReOpenSession(clientId).ContinueWith(t => { 
+                if (t.IsFaulted) {
+                    AVRealtime.PrintLog(t.Exception.InnerException.Message);
+                    return;
                 }
+                // IM Client 重连完成
+                OnReconnected?.Invoke();
             });
         }
     }

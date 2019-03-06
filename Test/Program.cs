@@ -6,66 +6,6 @@ using LeanCloud.Realtime;
 
 namespace Test {
 
-    class TestScheduler : TaskScheduler {
-        protected override IEnumerable<Task> GetScheduledTasks() {
-            throw new NotImplementedException();
-        }
-
-        protected override void QueueTask(Task task) {
-            throw new NotImplementedException();
-        }
-
-        protected override bool TryExecuteTaskInline(Task task, bool taskWasPreviouslyQueued) {
-            throw new NotImplementedException();
-
-        }
-
-        public override int MaximumConcurrencyLevel { 
-            get {
-                return 1;
-            }
-        }
-    }
-
-    class Client {
-        Queue<Action> actions = new Queue<Action>();
-        AutoResetEvent are = new AutoResetEvent(false);
-
-        internal bool Running { get; set; }
-
-        internal void Start() {
-            Task.Run(() => {
-                Running = true;
-                while (Running) {
-                    if (actions.Count > 0) {
-                        Action action = null;
-                        lock (actions) {
-                            action = actions.Dequeue();
-                        }
-                        action?.Invoke();
-                    } else {
-                        are.WaitOne();
-                    }
-                }
-            });
-            are.Set();
-        }
-
-        internal void Post(Action action) {
-            if (action == null)
-                return;
-
-            lock (actions) {
-                actions.Enqueue(action);
-                are.Set();
-            }
-        }
-
-        internal void Stop() {
-            Running = false;
-        }
-    }
-
     class MainClass {
 
         public static void Main(string[] args) {
@@ -106,7 +46,12 @@ namespace Test {
 
             var client = AVIMClient.GetInstance("leancloud");
             client.Open().ContinueWith(t => {
-                Console.WriteLine("---------------- client open done");
+                Console.WriteLine("----------------- {0} -----------------", "client open done");
+                var memberIds = new List<string> { "x", "y" };
+                return client.CreateConversationAsync(memberIds);
+            }).Unwrap().ContinueWith(t => {
+                Console.WriteLine("----------------- {0} -----------------", "conversation create done");
+                Console.WriteLine(t.Result.rawData);
             });
 
             //ThreadPool.QueueUserWorkItem((state) => { });

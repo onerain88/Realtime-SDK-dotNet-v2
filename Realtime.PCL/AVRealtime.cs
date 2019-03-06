@@ -9,7 +9,28 @@ namespace LeanCloud.Realtime {
 
         readonly static Dictionary<string, Task<Connection>> appIdToConnectingTask = new Dictionary<string, Task<Connection>>();
 
+        static RTMContext context = null;
+        static readonly object contextLockObj = new object();
+
+        /// <summary>
+        /// 保证线程安全
+        /// </summary>
+        /// <value>The context.</value>
+        internal static RTMContext Context {
+            get { 
+                if (context == null) { 
+                    lock (contextLockObj) {
+                        if (context == null) {
+                            context = new RTMContext();
+                        }
+                    }
+                }
+                return context;
+            }
+        }
+
         internal AVRealtime() {
+
         }
 
         /// <summary>
@@ -27,7 +48,7 @@ namespace LeanCloud.Realtime {
                 return task;
             }
             var tcs = new TaskCompletionSource<Connection>();
-            var connection = new Connection(appId);
+            var connection = new Connection(appId, "");
             connection.Connect().ContinueWith(t => { 
                 if (t.IsFaulted) {
                     tcs.SetException(t.Exception.InnerException);
