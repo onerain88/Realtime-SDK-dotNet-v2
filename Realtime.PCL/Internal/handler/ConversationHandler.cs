@@ -25,7 +25,7 @@ namespace LeanCloud.Realtime {
             var joinedConvCmd = command.convMessage;
             var initBy = joinedConvCmd.initBy;
             var cid = joinedConvCmd.Cid;
-            if (Connection.clientIdToClient.TryGetValue(clientId, out var client)) {
+            if (Connection.idToClient.TryGetValue(clientId, out var client)) {
                 // ？？？是不是应该把这个接口实现放到 Connection 中
                 client.QueryConversationAsync(cid).ContinueWith(t => { 
                     if (t.IsFaulted) {

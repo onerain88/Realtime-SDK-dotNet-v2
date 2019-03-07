@@ -11,12 +11,14 @@ namespace LeanCloud.Realtime {
         // WebSocket 连接
         WebSocketClient websocket;
 
-        internal readonly Dictionary<string, AVIMClient> clientIdToClient = new Dictionary<string, AVIMClient>();
+        internal readonly Dictionary<string, AVIMClient> idToClient = new Dictionary<string, AVIMClient>();
 
         // 缓存正在连接的任务
         Task<Connection> connectingTask;
 
         readonly CommandFactory commandFactory;
+
+        Dictionary<CommandType, CommandHandler> cmdToHandler;
 
         readonly string appId;
         readonly string appKey;
@@ -38,9 +40,19 @@ namespace LeanCloud.Realtime {
                 // 2. 建立连接
                 return websocket.Open(t.Result);
             }).Unwrap().ContinueWith(t => {
+                if (t.IsFaulted) {
+                    tcs.SetException(t.Exception.InnerException);
+                }
                 // 3. 注册 WebSocket 事件
                 websocket.OnMessage += WebSocketClient_OnMessage;
                 websocket.OnDisconnected += WebSocketClient_OnDisconnected;
+                // 4. 注册通知处理
+                cmdToHandler = new Dictionary<CommandType, CommandHandler> {
+                    { CommandType.Session, new SessionHandler(this) },
+                    { CommandType.Goaway, new GoAwayHandler(this) },
+                    // TODO ...
+
+                };
                 connectingTask = null;
                 tcs.SetResult(this);
             });
@@ -59,8 +71,7 @@ namespace LeanCloud.Realtime {
         /// 打开会话
         /// </summary>
         /// <returns>The session.</returns>
-        /// <param name="clientId">Client identifier.</param>
-        internal Task OpenSession(string clientId) {
+        internal Task OpenSession(AVIMClient client) {
             var tcs = new TaskCompletionSource<bool>();
             var sessionOpen = new SessionCommand {
                 configBitmap = 1,
@@ -69,14 +80,22 @@ namespace LeanCloud.Realtime {
                 T = 0,
                 S = null,
             };
-            var cmd = commandFactory.NewRequest(appId, CommandType.Session, OpType.Open);
+            var cmd = commandFactory.NewRequest(client.ClientId, CommandType.Session, OpType.Open);
             cmd.sessionMessage = sessionOpen;
             SendRequest(cmd).ContinueWith(t => {
-                var res = t.Result;
-                var sessionOpened = res.sessionMessage;
-                // TODO 判断会话打开结果
+                AVRealtime.Context.Post(() => {
+                    if (t.IsFaulted) {
+                        AVRealtime.PrintLog("open session error");
+                        tcs.SetException(t.Exception.InnerException);
+                    } else {
+                        var res = t.Result;
+                        var sessionOpened = res.sessionMessage;
+                        // TODO 判断会话打开结果
 
-                tcs.SetResult(true);
+                        idToClient.Add(client.ClientId, client);
+                        tcs.SetResult(true);
+                    }
+                });
             });
             return tcs.Task;
         }
@@ -111,7 +130,7 @@ namespace LeanCloud.Realtime {
                 Unique = true,
             };
             createConv.M.AddRange(memberIds);
-            var cmd = commandFactory.NewRequest(appId, CommandType.Conv, OpType.Start);
+            var cmd = commandFactory.NewRequest(clientId, CommandType.Conv, OpType.Start);
             cmd.convMessage = createConv;
             SendRequest(cmd).ContinueWith(t => {
                 if (t.IsFaulted) {
@@ -140,7 +159,7 @@ namespace LeanCloud.Realtime {
                 Cid = convId,
             };
             joinConv.M.Add(clientId);
-            var cmd = commandFactory.NewRequest(appId, CommandType.Conv, OpType.Add);
+            var cmd = commandFactory.NewRequest(clientId, CommandType.Conv, OpType.Add);
             cmd.convMessage = joinConv;
             SendRequest(cmd).ContinueWith(t => { 
                 if (t.IsFaulted) {
@@ -172,7 +191,7 @@ namespace LeanCloud.Realtime {
                     Data = JsonConvert.SerializeObject(where),
                 },
             };
-            var cmd = commandFactory.NewRequest(appId, CommandType.Conv, OpType.Query);
+            var cmd = commandFactory.NewRequest(clientId, CommandType.Conv, OpType.Query);
             cmd.convMessage = queryConv;
             SendRequest(cmd).ContinueWith(t => {
                 if (t.IsFaulted) {
@@ -207,7 +226,7 @@ namespace LeanCloud.Realtime {
                     Cid = convId,
                 };
                 quitConv.M.AddRange(memberIdList);
-                var cmd = commandFactory.NewRequest(appId, CommandType.Conv, OpType.Remove);
+                var cmd = commandFactory.NewRequest(clientId, CommandType.Conv, OpType.Remove);
                 cmd.convMessage = quitConv;
                 SendRequest(cmd).ContinueWith(t => {
                     if (t.IsFaulted) {
@@ -231,7 +250,7 @@ namespace LeanCloud.Realtime {
         }
 
         internal void Disconnect() {
-            websocket.Disconnect();
+            AVRealtime.Context.Post(websocket.Disconnect);
         }
 
         void WebSocketClient_OnMessage(GenericCommand cmd) {
@@ -246,13 +265,19 @@ namespace LeanCloud.Realtime {
                 }
             } else {
                 // 通知消息
-
+                AVRealtime.Context.Post(() => { 
+                    if (cmdToHandler.TryGetValue(cmd.Cmd, out var handler)) {
+                        handler.Handle(cmd);
+                    } else {
+                        AVRealtime.PrintLog("No handler for cmd: {0}", cmd.Cmd);
+                    }
+                });
             }
         }
 
         void WebSocketClient_OnDisconnected() {
             // 通知客户端处理断线事件
-            foreach (var client in clientIdToClient.Values) {
+            foreach (var client in idToClient.Values) {
                 client.HandleDisconnection();
             }
             // 开始重连
@@ -263,14 +288,14 @@ namespace LeanCloud.Realtime {
             // 延迟重连
             Task.Delay(5000).ContinueWith(t => {
                 return Connect();
-            }).ContinueWith(t => {
+            }).Unwrap().ContinueWith(t => {
                 if (t.IsFaulted) {
                     // 如果重连失败，则重复重连过程
                     Reconnect();
                     return;
                 }
                 // 重连成功
-                foreach (var client in clientIdToClient.Values) {
+                foreach (var client in idToClient.Values) {
                     client.HandleReconnected();
                 }
             });

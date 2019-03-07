@@ -42,6 +42,7 @@
     <Compile Include="Internal\handler\CommandHandler.cs" />
     <Compile Include="Internal\handler\GoAwayHandler.cs" />
     <Compile Include="Internal\RTMContext.cs" />
+    <Compile Include="Internal\handler\UnreadHandler.cs" />
   </ItemGroup>
   <ItemGroup>
     <None Include="packages.config" />

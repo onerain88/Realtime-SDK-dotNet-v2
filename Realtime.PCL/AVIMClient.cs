@@ -5,23 +5,21 @@ using System.Collections.Generic;
 
 namespace LeanCloud.Realtime {
     public class AVIMClient {
-        // Client Id 到 App Id 的映射
-        readonly static Dictionary<string, string> clientIdToAppId = new Dictionary<string, string>();
-
         readonly static Dictionary<string, AVIMClient> clients = new Dictionary<string, AVIMClient>();
 
         public event Action OnDisconnected;
         public event Action OnReconnected;
 
-        readonly string clientId;
+        public string ClientId {
+            get; private set;
+        }
 
         Connection connection;
 
         readonly Dictionary<string, AVIMConversation> convIdToConversation = new Dictionary<string, AVIMConversation>();
 
         AVIMClient(string clientId) {
-            this.clientId = clientId;
-
+            ClientId = clientId;
         }
 
         /// <summary>
@@ -57,7 +55,7 @@ namespace LeanCloud.Realtime {
                 }
                 // TODO 在 SDK 上下文中设置
                 connection = t.Result;
-                return connection.OpenSession(clientId);
+                return connection.OpenSession(this);
             }).Unwrap().ContinueWith(t => { 
                 if (t.IsFaulted) {
                     tcs.SetException(t.Exception.InnerException);
@@ -75,7 +73,7 @@ namespace LeanCloud.Realtime {
         /// <returns>The conversation async.</returns>
         /// <param name="memberIds">Member identifiers.</param>
         public Task<AVIMConversation> CreateConversationAsync(List<string> memberIds) {
-            return connection.CreateConversationAsync(clientId, memberIds);
+            return connection.CreateConversationAsync(ClientId, memberIds);
         }
 
         // TODO 完善参数
@@ -85,7 +83,7 @@ namespace LeanCloud.Realtime {
         /// <returns>The conversation async.</returns>
         /// <param name="convId">Conv identifier.</param>
         public Task<AVIMConversation> JoinConversationAsync(string convId) {
-            return connection.JoinConversationAsync(clientId, convId);
+            return connection.JoinConversationAsync(ClientId, convId);
         }
 
         /// <summary>
@@ -94,7 +92,7 @@ namespace LeanCloud.Realtime {
         /// <returns>The async.</returns>
         /// <param name="convId">Conv identifier.</param>
         public Task QuitAsync(string convId) {
-            return connection.QuitConversationAsync(clientId, convId, new List<string> { convId }).ContinueWith(t => {
+            return connection.QuitConversationAsync(ClientId, convId, new List<string> { convId }).ContinueWith(t => {
                 AVRealtime.Context.Post(() => {
                     convIdToConversation.Remove(convId);
                 });
@@ -108,11 +106,11 @@ namespace LeanCloud.Realtime {
         /// <param name="convId">Conv identifier.</param>
         /// <param name="memberIdList">Member identifier list.</param>
         public Task KickAsync(string convId, List<string> memberIdList) {
-            return connection.QuitConversationAsync(clientId, convId, memberIdList);
+            return connection.QuitConversationAsync(ClientId, convId, memberIdList);
         }
 
         public Task<AVIMConversation> QueryConversationAsync(string convId) {
-            return connection.QueryConversationAsync(clientId, convId);
+            return connection.QueryConversationAsync(ClientId, convId);
         }
 
         internal void HandleDisconnection() {
@@ -120,7 +118,7 @@ namespace LeanCloud.Realtime {
         }
 
         internal void HandleReconnected() {
-            connection.ReOpenSession(clientId).ContinueWith(t => { 
+            connection.ReOpenSession(ClientId).ContinueWith(t => { 
                 if (t.IsFaulted) {
                     AVRealtime.PrintLog(t.Exception.InnerException.Message);
                     return;

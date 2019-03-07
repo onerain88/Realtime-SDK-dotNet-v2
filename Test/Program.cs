@@ -44,15 +44,22 @@ namespace Test {
 
             AVRealtime.LogPrinter = Console.WriteLine;
 
-            var client = AVIMClient.GetInstance("leancloud");
+            var client = AVIMClient.GetInstance("xxxxxxx");
             client.Open().ContinueWith(t => {
-                Console.WriteLine("----------------- {0} -----------------", "client open done");
+                Console.WriteLine("☎️ {0}", "client open done");
                 var memberIds = new List<string> { "x", "y" };
                 return client.CreateConversationAsync(memberIds);
             }).Unwrap().ContinueWith(t => {
-                Console.WriteLine("----------------- {0} -----------------", "conversation create done");
+                Console.WriteLine("☎️ {0}", "conversation create done");
                 Console.WriteLine(t.Result.rawData);
             });
+
+            client.OnDisconnected += () => {
+                Console.WriteLine("☎️ {0} is disconnected", client.ClientId);
+            };
+            client.OnReconnected += () => {
+                Console.WriteLine("☎️ {0} is reconnected", client.ClientId);
+            };
 
             //ThreadPool.QueueUserWorkItem((state) => { });
 
