@@ -42,19 +42,22 @@ namespace LeanCloud.Realtime {
             }).Unwrap().ContinueWith(t => {
                 if (t.IsFaulted) {
                     tcs.SetException(t.Exception.InnerException);
-                }
-                // 3. 注册 WebSocket 事件
-                websocket.OnMessage += WebSocketClient_OnMessage;
-                websocket.OnDisconnected += WebSocketClient_OnDisconnected;
-                // 4. 注册通知处理
-                cmdToHandler = new Dictionary<CommandType, CommandHandler> {
-                    { CommandType.Session, new SessionHandler(this) },
-                    { CommandType.Goaway, new GoAwayHandler(this) },
-                    // TODO ...
+                } else {
+                    // 3. 注册 WebSocket 事件
+                    websocket.OnMessage += WebSocketClient_OnMessage;
+                    websocket.OnDisconnected += WebSocketClient_OnDisconnected;
+                    // 4. 注册通知处理
+                    cmdToHandler = new Dictionary<CommandType, CommandHandler> {
+                        { CommandType.Session, new SessionHandler(this) },
+                        { CommandType.Conv, new ConversationHandler(this) },
+                        { CommandType.Unread, new UnreadHandler(this) },
+                        { CommandType.Goaway, new GoAwayHandler(this) },
+                        // TODO ...
 
-                };
-                connectingTask = null;
-                tcs.SetResult(this);
+                    };
+                    connectingTask = null;
+                    tcs.SetResult(this);
+                }
             });
             connectingTask = tcs.Task;
             return connectingTask;
@@ -62,8 +65,10 @@ namespace LeanCloud.Realtime {
 
         Task<GenericCommand> SendRequest(GenericCommand cmd) {
             var tcs = new TaskCompletionSource<GenericCommand>();
-            requests.Add(cmd.I, tcs);
-            websocket.Send(cmd);
+            AVRealtime.Context.Post(() => {
+                requests.Add(cmd.I, tcs);
+                websocket.Send(cmd);
+            });
             return tcs.Task;
         }
 
@@ -110,10 +115,12 @@ namespace LeanCloud.Realtime {
             var cmd = commandFactory.NewRequest(clientId, CommandType.Session, OpType.Open);
             cmd.sessionMessage = sessionOpen;
             SendRequest(cmd).ContinueWith(t => {
-                var res = t.Result;
-                // TODO 判断会话打开结果
+                AVRealtime.Context.Post(() => {
+                    var res = t.Result;
+                    // TODO 判断会话打开结果
 
-                tcs.SetResult(true);
+                    tcs.SetResult(true);
+                });
             });
             return tcs.Task;
         }
@@ -134,15 +141,18 @@ namespace LeanCloud.Realtime {
             cmd.convMessage = createConv;
             SendRequest(cmd).ContinueWith(t => {
                 if (t.IsFaulted) {
-                    tcs.SetException(t.Exception.InnerException);
-                    return null;
+                    throw t.Exception.InnerException;
                 }
                 var res = t.Result;
                 var createdRes = res.convMessage;
                 // TODO 查询会话对象
                 return QueryConversationAsync(clientId, createdRes.Cid);
             }).Unwrap().ContinueWith(t => {
-                tcs.SetResult(t.Result);
+                if (t.IsFaulted) {
+                    tcs.SetException(t.Exception.InnerException);
+                } else {
+                    tcs.SetResult(t.Result);
+                }
             });
             return tcs.Task;
         }
@@ -163,8 +173,7 @@ namespace LeanCloud.Realtime {
             cmd.convMessage = joinConv;
             SendRequest(cmd).ContinueWith(t => { 
                 if (t.IsFaulted) {
-                    tcs.SetException(t.Exception.InnerException);
-                    return null;
+                    throw t.Exception.InnerException;
                 }
                 var res = t.Result;
                 var joinedRes = res.convMessage;
@@ -196,17 +205,23 @@ namespace LeanCloud.Realtime {
             SendRequest(cmd).ContinueWith(t => {
                 if (t.IsFaulted) {
                     tcs.SetException(t.Exception.InnerException);
-                    return;
+                } else {
+                    var res = t.Result;
+                    var queriedRes = res.convMessage;
+                    // TODO 实例化 AVIMConversation 对象
+                    var convs = JsonConvert.DeserializeObject<List<Dictionary<string, object>>>(queriedRes.Results.Data);
+                    var rawData = convs[0];
+                    var conv = new AVIMConversation {
+                        rawData = rawData
+                    };
+                    // 将会话对象添加至对应的用户内存中
+                    AVRealtime.Context.Post(() => {
+                        if (idToClient.TryGetValue(clientId, out var client)) {
+                            client.UpdateConversation(conv);
+                        }
+                        tcs.SetResult(conv);
+                    });
                 }
-                var res = t.Result;
-                var queriedRes = res.convMessage;
-                // TODO 实例化 AVIMConversation 对象
-                var convs = JsonConvert.DeserializeObject<List<Dictionary<string, object>>>(queriedRes.Results.Data);
-                var rawData = convs[0];
-                var conv = new AVIMConversation {
-                    rawData = rawData
-                };
-                tcs.SetResult(conv);
             });
             return tcs.Task;
         }
@@ -235,9 +250,17 @@ namespace LeanCloud.Realtime {
                     }
                     var res = t.Result;
                     var quitRes = res.convMessage;
-                    // TODO 判断是否成功离开
-
-
+                    // 判断是否是自己成功离开
+                    if (quitRes.allowedPids.Contains(clientId)) {
+                        AVRealtime.Context.Post(() => {
+                            if (idToClient.TryGetValue(clientId, out var client)) {
+                                client.RemoveConversation(convId);
+                            }
+                            tcs.SetResult(true);
+                        });
+                    } else {
+                        tcs.SetResult(true);
+                    }
                 });
             }
             return tcs.Task;
@@ -254,25 +277,26 @@ namespace LeanCloud.Realtime {
         }
 
         void WebSocketClient_OnMessage(GenericCommand cmd) {
-            if (cmd.ShouldSerializeI()) {
-                // 应答消息
-                var reqId = cmd.I;
-                if (requests.TryGetValue(reqId, out var tcs)) {
-                    tcs.SetResult(cmd);
-                } else {
-                    // 没有缓存的应答
+            AVRealtime.Context.Post(() => {
+                if (cmd.ShouldSerializeI()) {
+                    // 应答消息
+                    var reqId = cmd.I;
+                    if (requests.TryGetValue(reqId, out var tcs)) {
+                        tcs.SetResult(cmd);
+                        requests.Remove(reqId);
+                    } else {
+                        // 没有缓存的应答
 
-                }
-            } else {
-                // 通知消息
-                AVRealtime.Context.Post(() => { 
+                    }
+                } else {
+                    // 通知消息
                     if (cmdToHandler.TryGetValue(cmd.Cmd, out var handler)) {
                         handler.Handle(cmd);
                     } else {
                         AVRealtime.PrintLog("No handler for cmd: {0}", cmd.Cmd);
                     }
-                });
-            }
+                }
+            });
         }
 
         void WebSocketClient_OnDisconnected() {

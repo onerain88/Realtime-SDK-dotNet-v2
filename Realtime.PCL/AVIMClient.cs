@@ -7,7 +7,13 @@ namespace LeanCloud.Realtime {
     public class AVIMClient {
         readonly static Dictionary<string, AVIMClient> clients = new Dictionary<string, AVIMClient>();
 
+        /// <summary>
+        /// 断开连接事件
+        /// </summary>
         public event Action OnDisconnected;
+        /// <summary>
+        /// 重连成功事件
+        /// </summary>
         public event Action OnReconnected;
 
         public string ClientId {
@@ -16,7 +22,7 @@ namespace LeanCloud.Realtime {
 
         Connection connection;
 
-        readonly Dictionary<string, AVIMConversation> convIdToConversation = new Dictionary<string, AVIMConversation>();
+        readonly Dictionary<string, AVIMConversation> idToConversation = new Dictionary<string, AVIMConversation>();
 
         AVIMClient(string clientId) {
             ClientId = clientId;
@@ -47,23 +53,17 @@ namespace LeanCloud.Realtime {
         /// </summary>
         /// <returns>The open.</returns>
         public Task Open() {
-            var tcs = new TaskCompletionSource<bool>();
-            AVRealtime.GetConnection("Eohx7L4EMfe4xmairXeT7q1w-gzGzoHsz").ContinueWith(t => { 
+            return AVRealtime.GetConnection("Eohx7L4EMfe4xmairXeT7q1w-gzGzoHsz").ContinueWith(t => { 
                 if (t.IsFaulted) {
                     AVRealtime.PrintLog(t.Exception.InnerException.Message);
-                    return null;
+                    var tcs = new TaskCompletionSource<bool>();
+                    tcs.SetException(t.Exception.InnerException);
+                    return tcs.Task;
                 }
                 // TODO 在 SDK 上下文中设置
                 connection = t.Result;
                 return connection.OpenSession(this);
-            }).Unwrap().ContinueWith(t => { 
-                if (t.IsFaulted) {
-                    tcs.SetException(t.Exception.InnerException);
-                    return;
-                }
-                tcs.SetResult(true);
-            });
-            return tcs.Task;
+            }).Unwrap();
         }
 
         // TODO 完善参数
@@ -94,7 +94,7 @@ namespace LeanCloud.Realtime {
         public Task QuitAsync(string convId) {
             return connection.QuitConversationAsync(ClientId, convId, new List<string> { convId }).ContinueWith(t => {
                 AVRealtime.Context.Post(() => {
-                    convIdToConversation.Remove(convId);
+                    idToConversation.Remove(convId);
                 });
             });
         }
@@ -126,6 +126,15 @@ namespace LeanCloud.Realtime {
                 // IM Client 重连完成
                 OnReconnected?.Invoke();
             });
+        }
+
+        internal void UpdateConversation(AVIMConversation conv) {
+            idToConversation.Remove(conv.convId);
+            idToConversation.Add(conv.convId, conv);
+        }
+
+        internal void RemoveConversation(string convId) {
+            idToConversation.Remove(convId);
         }
     }
 }
