@@ -7,6 +7,7 @@ namespace LeanCloud.Realtime {
     public class AVIMClient {
         readonly static Dictionary<string, AVIMClient> clients = new Dictionary<string, AVIMClient>();
 
+        public event Action<AVIMMessage> OnReceivedMessage;
         /// <summary>
         /// 断开连接事件
         /// </summary>
@@ -22,10 +23,11 @@ namespace LeanCloud.Realtime {
 
         Connection connection;
 
-        readonly Dictionary<string, AVIMConversation> idToConversation = new Dictionary<string, AVIMConversation>();
+        internal readonly Dictionary<string, AVIMConversation> idToConversation = new Dictionary<string, AVIMConversation>();
 
         AVIMClient(string clientId) {
             ClientId = clientId;
+
         }
 
         /// <summary>
@@ -113,6 +115,10 @@ namespace LeanCloud.Realtime {
             return connection.QueryConversationAsync(ClientId, convId);
         }
 
+        internal Task<AVIMMessage> SendMessageAsync(AVIMConversation conversation, AVIMMessage message) {
+            return connection.SendMessageAsync(this, conversation, message);
+        }
+
         internal void HandleDisconnection() {
             OnDisconnected?.Invoke();
         }
@@ -129,12 +135,18 @@ namespace LeanCloud.Realtime {
         }
 
         internal void UpdateConversation(AVIMConversation conv) {
+            conv.Client = this;
             idToConversation.Remove(conv.convId);
             idToConversation.Add(conv.convId, conv);
         }
 
         internal void RemoveConversation(string convId) {
             idToConversation.Remove(convId);
+        }
+
+        internal void HandleReceiveMessage(AVIMConversation conversation, AVIMMessage message) {
+            message.Conversation = conversation;
+            OnReceivedMessage?.Invoke(message);
         }
     }
 }

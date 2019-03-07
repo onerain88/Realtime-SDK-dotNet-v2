@@ -1,13 +1,18 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Threading.Tasks;
 
 namespace LeanCloud.Realtime {
     public class AVIMConversation {
-        public String convId;
+        public string convId;
         public Dictionary<string, object> rawData;
 
-        public void SendMessageAsync() { 
-            
+        public AVIMClient Client {
+            get; internal set;
+        }
+
+        public Task<AVIMMessage> SendMessageAsync(AVIMMessage message) {
+            return Client.SendMessageAsync(this, message);
         }
     }
 }

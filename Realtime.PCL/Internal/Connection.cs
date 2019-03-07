@@ -50,6 +50,7 @@ namespace LeanCloud.Realtime {
                     cmdToHandler = new Dictionary<CommandType, CommandHandler> {
                         { CommandType.Session, new SessionHandler(this) },
                         { CommandType.Conv, new ConversationHandler(this) },
+                        { CommandType.Direct, new DirectHandler(this) },
                         { CommandType.Unread, new UnreadHandler(this) },
                         { CommandType.Goaway, new GoAwayHandler(this) },
                         // TODO ...
@@ -212,11 +213,13 @@ namespace LeanCloud.Realtime {
                     var convs = JsonConvert.DeserializeObject<List<Dictionary<string, object>>>(queriedRes.Results.Data);
                     var rawData = convs[0];
                     var conv = new AVIMConversation {
+                        convId = convId,
                         rawData = rawData
                     };
                     // 将会话对象添加至对应的用户内存中
                     AVRealtime.Context.Post(() => {
                         if (idToClient.TryGetValue(clientId, out var client)) {
+                            conv.Client = client;
                             client.UpdateConversation(conv);
                         }
                         tcs.SetResult(conv);
@@ -266,6 +269,25 @@ namespace LeanCloud.Realtime {
             return tcs.Task;
         }
 
+        internal Task<AVIMMessage> SendMessageAsync(AVIMClient client, AVIMConversation conversation, AVIMMessage message) {
+            var tcs = new TaskCompletionSource<AVIMMessage>();
+            var sendMsg = new DirectCommand { 
+                // TODO 完善消息体
+                Cid = conversation.convId,
+                Msg = message.ToString()
+            };
+            var cmd = commandFactory.NewRequest(client.ClientId, CommandType.Direct);
+            cmd.directMessage = sendMsg;
+            SendRequest(cmd).ContinueWith(t => { 
+                if (t.IsFaulted) {
+                    tcs.SetException(t.Exception.InnerException);    
+                } else {
+                    tcs.SetResult(message);
+                }
+            });
+            return tcs.Task;
+        }
+
         internal Task ClearCache() {
             // TODO 清空 router 缓存
 
@@ -291,7 +313,11 @@ namespace LeanCloud.Realtime {
                 } else {
                     // 通知消息
                     if (cmdToHandler.TryGetValue(cmd.Cmd, out var handler)) {
-                        handler.Handle(cmd);
+                        try {
+                            handler.Handle(cmd);
+                        } catch (Exception e) {
+                            AVRealtime.PrintLog(e.Message);
+                        }
                     } else {
                         AVRealtime.PrintLog("No handler for cmd: {0}", cmd.Cmd);
                     }

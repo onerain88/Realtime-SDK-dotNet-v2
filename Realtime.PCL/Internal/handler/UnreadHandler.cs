@@ -7,7 +7,7 @@ namespace LeanCloud.Realtime {
         }
 
         internal override void Handle(GenericCommand command) {
-            throw new NotImplementedException();
+            //throw new NotImplementedException();
         }
     }
 }

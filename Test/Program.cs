@@ -53,51 +53,62 @@ namespace Test {
             AVRealtime.LogPrinter = Console.WriteLine;
 
             var client = AVIMClient.GetInstance("xxxxxxx");
+
+            client.OnReceivedMessage += (message) => {
+                Console.WriteLine("☎️  {0} received message", client.ClientId);
+                if (message is AVIMTextMessage) {
+                    Console.WriteLine("☎️  {0} received: {1}", client.ClientId, (message as AVIMTextMessage).Text);
+                }
+            };
+            client.OnDisconnected += () => {
+                Console.WriteLine("☎️  {0} is disconnected", client.ClientId);
+            };
+            client.OnReconnected += () => {
+                Console.WriteLine("☎️  {0} is reconnected", client.ClientId);
+            };
+
+            //client.Open().ContinueWith(t => {
+            //    Console.WriteLine("☎️  {0}", "client open done");
+            //    var memberIds = new List<string> { "x", "y" };
+            //    return client.CreateConversationAsync(memberIds);
+            //}).Unwrap().ContinueWith(t => {
+            //    Console.WriteLine("☎️  {0}", "conversation create done");
+            //    Console.WriteLine(t.Result.rawData);
+            //});
+
             client.Open().ContinueWith(t => {
-                Console.WriteLine("☎️ {0}", "client open done");
+                Console.WriteLine("☎️  {0}", "client open done");
                 var memberIds = new List<string> { "x", "y" };
                 return client.CreateConversationAsync(memberIds);
             }).Unwrap().ContinueWith(t => {
-                Console.WriteLine("☎️ {0}", "conversation create done");
+                Console.WriteLine("☎️  {0}", "conversation create done");
                 Console.WriteLine(t.Result.rawData);
-            });
-            client.OnDisconnected += () => {
-                Console.WriteLine("☎️ {0} is disconnected", client.ClientId);
-            };
-            client.OnReconnected += () => {
-                Console.WriteLine("☎️ {0} is reconnected", client.ClientId);
-            };
-        }
-
-        static void TestReturnNull() {
-            Task.Delay(1000).ContinueWith(t => {
-                if (true) {
-                    return null;
-                }
-                return Task.Delay(500);
+                var conv = t.Result;
+                var msg = new AVIMTextMessage {
+                    Text = "hello, world",
+                };
+                return conv.SendMessageAsync(msg);
             }).Unwrap().ContinueWith(t => {
-                if (t.IsCanceled) {
-                    Console.WriteLine("task is canceled");
-                    throw new Exception("cancel task");
-                }
-                return Task.Delay(500);
-            }).Unwrap().ContinueWith(t => {
-                Console.WriteLine(t.ToString());
+                Console.WriteLine("☎️  {0}", "send message done");
             });
         }
 
-        static void TestContext() {
-
-            //Task.Delay(2000).ContinueWith(t => {
-            //    context.Post(state => {
-            //        Console.WriteLine($"delay 2000 at {Environment.CurrentManagedThreadId}");
-            //    }, null);
-            //});
-            //Task.Delay(3000).ContinueWith(t => {
-            //    context.Post(state => {
-            //        Console.WriteLine($"delay 3000 at {Environment.CurrentManagedThreadId}");
-            //    }, null);
-            //});
-        }
+        //static void TestReturnNull() {
+        //    Task.Delay(1000).ContinueWith(t => {
+        //        if (true) {
+        //            return null;
+        //        }
+        //        // 只是保证编译
+        //        return Task.Delay(500);
+        //    }).Unwrap().ContinueWith(t => {
+        //        if (t.IsCanceled) {
+        //            Console.WriteLine("task is canceled");
+        //            throw new Exception("cancel task");
+        //        }
+        //        return Task.Delay(500);
+        //    }).Unwrap().ContinueWith(t => {
+        //        Console.WriteLine(t.ToString());
+        //    });
+        //}
     }
 }

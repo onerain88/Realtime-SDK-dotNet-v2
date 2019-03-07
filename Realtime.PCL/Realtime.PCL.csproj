@@ -28,7 +28,7 @@
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="Properties\AssemblyInfo.cs" />
-    <Compile Include="Message\Messages.cs" />
+    <Compile Include="Protocol\Messages.cs" />
     <Compile Include="AVRealtime.cs" />
     <Compile Include="AVIMClient.cs" />
     <Compile Include="AVIMConversation.cs" />
@@ -43,6 +43,9 @@
     <Compile Include="Internal\handler\GoAwayHandler.cs" />
     <Compile Include="Internal\RTMContext.cs" />
     <Compile Include="Internal\handler\UnreadHandler.cs" />
+    <Compile Include="Internal\handler\DirectHandler.cs" />
+    <Compile Include="Messages\AVIMMessage.cs" />
+    <Compile Include="Messages\AVIMTextMessage.cs" />
   </ItemGroup>
   <ItemGroup>
     <None Include="packages.config" />
@@ -80,9 +83,10 @@
     </Reference>
   </ItemGroup>
   <ItemGroup>
-    <Folder Include="Message\" />
+    <Folder Include="Protocol\" />
     <Folder Include="Internal\" />
     <Folder Include="Internal\handler\" />
+    <Folder Include="Messages\" />
   </ItemGroup>
   <Import Project="$(MSBuildExtensionsPath32)\Microsoft\Portable\$(TargetFrameworkVersion)\Microsoft.Portable.CSharp.targets" />
 </Project>
