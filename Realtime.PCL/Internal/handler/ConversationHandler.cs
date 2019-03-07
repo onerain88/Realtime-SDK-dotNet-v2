@@ -12,8 +12,10 @@ namespace LeanCloud.Realtime {
                     HandleJoinedConversation(command);
                     break;
                 case OpType.MembersJoined:
+                    HandleMembersJoined(command);
                     break;
-                case OpType.MembersBlocked:
+                case OpType.MembersLeft:
+                    HandleMembersLeft(command);
                     break;
                 default:
                     break;
@@ -27,16 +29,71 @@ namespace LeanCloud.Realtime {
             var cid = joinedConvCmd.Cid;
             if (Connection.idToClient.TryGetValue(clientId, out var client)) {
                 // ？？？是不是应该把这个接口实现放到 Connection 中
-                client.QueryConversationAsync(cid).ContinueWith(t => { 
+                Connection.QueryConversationAsync(clientId, cid).ContinueWith(t => { 
                     if (t.IsFaulted) {
                         AVRealtime.PrintLog(t.Exception.InnerException.Message);
-                        return;
+                    } else {
+                        var conv = t.Result;
+                        AVRealtime.Context.Post(() => {
+                            client.HandleJoinedConversation(conv);
+                        });
                     }
-                    // TODO 用户添加会话对象
-
-                    // TODO 通知用户被加入会话
-
                 });
+            } else { 
+                // TODO 没有查找到对应 IM Client
+
+            }
+        }
+
+        void HandleMembersJoined(GenericCommand command) {
+            var clientId = command.peerId;
+            var membersJoined = command.convMessage;
+            var cid = membersJoined.Cid;
+            var memberIds = membersJoined.M;
+            if (Connection.idToClient.TryGetValue(clientId, out var client)) {
+                if (client.idToConversation.TryGetValue(cid, out var conversation)) {
+                    client.HandleMembersJoined(conversation, memberIds);
+                } else {
+                    Connection.QueryConversationAsync(clientId, cid).ContinueWith(t => { 
+                        if (t.IsFaulted) {
+                            AVRealtime.PrintLog(t.Exception.InnerException.Message);
+                        } else {
+                            var conv = t.Result;
+                            AVRealtime.Context.Post(() => {
+                                client.HandleMembersJoined(conversation, memberIds);
+                            });
+                        }
+                    });
+                }
+            } else {
+                // TODO 没有查找到对应 IM Client
+
+            }
+        }
+
+        void HandleMembersLeft(GenericCommand command) {
+            var clientId = command.peerId;
+            var membersLeft = command.convMessage;
+            var cid = membersLeft.Cid;
+            var memberIds = membersLeft.M;
+            if (Connection.idToClient.TryGetValue(clientId, out var client)) {
+                if (client.idToConversation.TryGetValue(cid, out var conversation)) {
+                    client.HandleMemebersLeft(conversation, memberIds);
+                } else {
+                    Connection.QueryConversationAsync(clientId, cid).ContinueWith(t => {
+                        if (t.IsFaulted) {
+                            AVRealtime.PrintLog(t.Exception.InnerException.Message);
+                        } else {
+                            var conv = t.Result;
+                            AVRealtime.Context.Post(() => {
+                                client.HandleMemebersLeft(conversation, memberIds);
+                            });
+                        }
+                    });
+                }
+            } else {
+                // TODO 没有查找到对应 IM Client
+
             }
         }
     }

@@ -7,6 +7,22 @@ namespace LeanCloud.Realtime {
     public class AVIMClient {
         readonly static Dictionary<string, AVIMClient> clients = new Dictionary<string, AVIMClient>();
 
+        /// <summary>
+        /// 被邀请加入到会话
+        /// </summary>
+        public event Action<AVIMConversation> OnJoinedConversation;
+        /// <summary>
+        /// 有用户加入到会话
+        /// </summary>
+        public event Action<AVIMConversation, List<string>> OnMembersJoined;
+        /// <summary>
+        /// 有用户离开会话
+        /// </summary>
+        public event Action<AVIMConversation, List<string>> OnMembersLeft;
+
+        /// <summary>
+        /// 接收消息事件
+        /// </summary>
         public event Action<AVIMMessage> OnReceivedMessage;
         /// <summary>
         /// 断开连接事件
@@ -35,12 +51,12 @@ namespace LeanCloud.Realtime {
         /// </summary>
         /// <returns>The client.</returns>
         /// <param name="clientId">Client identifier.</param>
-        public static AVIMClient GetInstance(string clientId) { 
+        public static AVIMClient GetInstance(string clientId) {
             // TODO 判断 clientId 合法性
             if (string.IsNullOrEmpty(clientId)) {
                 throw new Exception("client id is null");
             }
-            lock (clients) { 
+            lock (clients) {
                 if (clients.TryGetValue(clientId, out var client)) {
                     return client;
                 }
@@ -55,7 +71,7 @@ namespace LeanCloud.Realtime {
         /// </summary>
         /// <returns>The open.</returns>
         public Task Open() {
-            return AVRealtime.GetConnection("Eohx7L4EMfe4xmairXeT7q1w-gzGzoHsz").ContinueWith(t => { 
+            return AVRealtime.GetConnection("Eohx7L4EMfe4xmairXeT7q1w-gzGzoHsz").ContinueWith(t => {
                 if (t.IsFaulted) {
                     AVRealtime.PrintLog(t.Exception.InnerException.Message);
                     var tcs = new TaskCompletionSource<bool>();
@@ -124,7 +140,7 @@ namespace LeanCloud.Realtime {
         }
 
         internal void HandleReconnected() {
-            connection.ReOpenSession(ClientId).ContinueWith(t => { 
+            connection.ReOpenSession(ClientId).ContinueWith(t => {
                 if (t.IsFaulted) {
                     AVRealtime.PrintLog(t.Exception.InnerException.Message);
                     return;
@@ -147,6 +163,18 @@ namespace LeanCloud.Realtime {
         internal void HandleReceiveMessage(AVIMConversation conversation, AVIMMessage message) {
             message.Conversation = conversation;
             OnReceivedMessage?.Invoke(message);
+        }
+
+        internal void HandleJoinedConversation(AVIMConversation conversation) {
+            OnJoinedConversation?.Invoke(conversation);
+        }
+
+        internal void HandleMembersJoined(AVIMConversation conversation, List<string> memberIds) {
+            OnMembersJoined?.Invoke(conversation, memberIds);
+        }
+
+        internal void HandleMemebersLeft(AVIMConversation conversation, List<string> memberIds) {
+            OnMembersLeft?.Invoke(conversation, memberIds);
         }
     }
 }
